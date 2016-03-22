@@ -220,7 +220,6 @@ class HttpLayer(Layer):
                     return
 
             except (ProtocolException, NetlibException) as e:
-                self.send_error_response(502, repr(e))
 
                 if not flow.response:
                     flow.error = Error(str(e))
@@ -231,6 +230,7 @@ class HttpLayer(Layer):
                     six.reraise(ProtocolException, ProtocolException(
                         "Error in HTTP connection: %s" % repr(e)), sys.exc_info()[2])
             finally:
+                self.send_error_response(502, repr(e))
                 flow.live = False
 
     def get_request_from_client(self):

@@ -938,8 +938,10 @@ class FlowMaster(controller.Master):
         """
             Returns None if successful, or error message if not.
         """
+        print("Replaying Request")
         if f.live and run_scripthooks:
-            return "Can't replay live request."
+            print("Can't replay live request.")
+            #return "Can't replay live request."
         if f.intercepted:
             return "Can't replay while intercepting..."
         if f.request.content == CONTENT_MISSING:
@@ -951,6 +953,7 @@ class FlowMaster(controller.Master):
                 f.request.headers["Content-Length"] = str(len(f.request.content))
             f.response = None
             f.error = None
+            print("about to process replay req")
             self.process_new_request(f)
             rt = RequestReplayThread(
                 self.server.config,
@@ -958,6 +961,7 @@ class FlowMaster(controller.Master):
                 self.masterq if run_scripthooks else False,
                 self.should_exit
             )
+            print("start replay thread")
             rt.start()  # pragma: no cover
             if block:
                 rt.join()

@@ -23,6 +23,7 @@ class RequestReplayThread(threading.Thread):
         """
         self.config, self.flow = config, flow
         if masterq:
+            print("masterq exists")
             self.channel = Channel(masterq, should_exit)
         else:
             self.channel = None
@@ -32,10 +33,12 @@ class RequestReplayThread(threading.Thread):
         r = self.flow.request
         form_out_backup = r.form_out
         try:
+            print("In Replay Thread")
             self.flow.response = None
 
             # If we have a channel, run script hooks.
             if self.channel:
+                print("Invoke request script")
                 request_reply = self.channel.ask("request", self.flow)
                 if request_reply == Kill:
                     raise Kill()
@@ -45,8 +48,15 @@ class RequestReplayThread(threading.Thread):
             if not self.flow.response:
                 # In all modes, we directly connect to the server displayed
                 if self.config.mode == "upstream":
-                    server_address = self.config.upstream_server.address
-                    server = ServerConnection(server_address, (self.config.host, 0))
+                    print("config upstream mode detected")
+                    print(self.config.upstream_server.address)
+                    print(self.flow.server_conn)
+                    print(self.flow.request.headers)
+                    #server_address = self.config.upstream_server.address
+                    #server = ServerConnection(server_address, (self.config.host, 0))
+                    ##Use flow for server_conn information
+                    server = self.flow.server_conn
+                    self.channel.ask("serverconnect", server)
                     server.connect()
                     if r.scheme == "https":
                         connect_request = make_connect_request((r.host, r.port))
@@ -86,8 +96,10 @@ class RequestReplayThread(threading.Thread):
                     body_size_limit=self.config.body_size_limit
                 ))
             if self.channel:
+                print("invoke response")
                 response_reply = self.channel.ask("response", self.flow)
                 if response_reply == Kill:
+                    print("raise kill")
                     raise Kill()
         except (ReplayException, HttpException, TcpException) as e:
             self.flow.error = Error(str(e))

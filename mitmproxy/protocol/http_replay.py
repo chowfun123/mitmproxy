@@ -8,7 +8,8 @@ from netlib.http import http1
 from ..controller import Channel
 from ..models import Error, HTTPResponse, ServerConnection, make_connect_request
 from .base import Kill
-
+import time
+import socket
 
 # TODO: Doesn't really belong into mitmproxy.protocol...
 
@@ -49,15 +50,19 @@ class RequestReplayThread(threading.Thread):
                 # In all modes, we directly connect to the server displayed
                 if self.config.mode == "upstream":
                     print("config upstream mode detected")
-                    print(self.config.upstream_server.address)
-                    print(self.flow.server_conn)
-                    print(self.flow.request.headers)
+                    #print(self.config.upstream_server.address)
+                    #print(self.flow.server_conn)
+                    #print(self.flow.request.headers)
                     #server_address = self.config.upstream_server.address
                     #server = ServerConnection(server_address, (self.config.host, 0))
                     ##Use flow for server_conn information
                     server = self.flow.server_conn
-                    self.channel.ask("serverconnect", server)
+                    #self.channel.ask("serverconnect", server)
+                    #self.flow.client_conn.connection.settimeout(120)
+                    print("try connect")
                     server.connect()
+                    print("done connect")
+                    print(r.method)
                     if r.scheme == "https":
                         connect_request = make_connect_request((r.host, r.port))
                         server.wfile.write(http1.assemble_request(connect_request))
@@ -90,11 +95,18 @@ class RequestReplayThread(threading.Thread):
                 server.wfile.write(http1.assemble_request(r))
                 server.wfile.flush()
                 self.flow.server_conn = server
-                self.flow.response = HTTPResponse.wrap(http1.read_response(
+                myResponse = http1.read_response(
                     server.rfile,
                     r,
                     body_size_limit=self.config.body_size_limit
-                ))
+                )
+                self.flow.response = HTTPResponse.wrap(myResponse)
+                print("reply with response")
+                print(self.flow.response.content)
+                self.flow.client_conn.send(http1.assemble_response(myResponse))
+                #self.flow.client_conn.send(myResponse)
+                #self.flow.reply()
+                print("done esnd")
             if self.channel:
                 print("invoke response")
                 response_reply = self.channel.ask("response", self.flow)
@@ -110,8 +122,9 @@ class RequestReplayThread(threading.Thread):
             # first place.
             from ..proxy.root_context import Log
             self.channel.tell("log", Log("Connection killed", "info"))
-        except Exception:
+        except Exception as e:
             from ..proxy.root_context import Log
+            print(e)
             self.channel.tell("log", Log(traceback.format_exc(), "error"))
         finally:
             r.form_out = form_out_backup

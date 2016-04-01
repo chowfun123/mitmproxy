@@ -6,7 +6,7 @@ from netlib.exceptions import HttpException, TcpException
 from netlib.http import http1
 
 from ..controller import Channel
-from ..models import Error, HTTPResponse, ServerConnection, make_connect_request
+from ..models import Error, HTTPResponse, ServerConnection, make_connect_request, make_connect_response
 from .base import Kill
 import time
 import socket
@@ -34,12 +34,10 @@ class RequestReplayThread(threading.Thread):
         r = self.flow.request
         form_out_backup = r.form_out
         try:
-            print("In Replay Thread")
             self.flow.response = None
 
             # If we have a channel, run script hooks.
             if self.channel:
-                print("Invoke request script")
                 request_reply = self.channel.ask("request", self.flow)
                 if request_reply == Kill:
                     raise Kill()
@@ -49,35 +47,31 @@ class RequestReplayThread(threading.Thread):
             if not self.flow.response:
                 # In all modes, we directly connect to the server displayed
                 if self.config.mode == "upstream":
-                    print("config upstream mode detected")
-                    #print(self.config.upstream_server.address)
-                    #print(self.flow.server_conn)
-                    #print(self.flow.request.headers)
-                    #server_address = self.config.upstream_server.address
-                    #server = ServerConnection(server_address, (self.config.host, 0))
                     ##Use flow for server_conn information
                     server = self.flow.server_conn
-                    #self.channel.ask("serverconnect", server)
-                    #self.flow.client_conn.connection.settimeout(120)
-                    print("try connect")
                     server.connect()
-                    print("done connect")
-                    print(r.method)
-                    if r.scheme == "https":
+                    if (r.scheme == "https"):
                         connect_request = make_connect_request((r.host, r.port))
-                        server.wfile.write(http1.assemble_request(connect_request))
+                        server.wfile.write(http1.assemble_request(r))
                         server.wfile.flush()
                         resp = http1.read_response(
                             server.rfile,
                             connect_request,
                             body_size_limit=self.config.body_size_limit
                         )
+                        print (resp)
                         if resp.status_code != 200:
                             raise ReplayException("Upstream server refuses CONNECT request")
                         server.establish_ssl(
                             self.config.clientcerts,
                             sni=self.flow.server_conn.sni
                         )
+                        self.flow.response = HTTPResponse.wrap(resp)
+                        print("reply with SSL connect response")
+                        print(server.timestamp_ssl_setup)
+                        print(self.flow.response.headers)
+                        print(self.flow.response.content)
+                        self.flow.client_conn.send(http1.assemble_response(resp))
                         r.form_out = "relative"
                     else:
                         r.form_out = "absolute"
@@ -101,14 +95,8 @@ class RequestReplayThread(threading.Thread):
                     body_size_limit=self.config.body_size_limit
                 )
                 self.flow.response = HTTPResponse.wrap(myResponse)
-                print("reply with response")
-                print(self.flow.response.content)
                 self.flow.client_conn.send(http1.assemble_response(myResponse))
-                #self.flow.client_conn.send(myResponse)
-                #self.flow.reply()
-                print("done esnd")
             if self.channel:
-                print("invoke response")
                 response_reply = self.channel.ask("response", self.flow)
                 if response_reply == Kill:
                     print("raise kill")
@@ -126,5 +114,7 @@ class RequestReplayThread(threading.Thread):
             from ..proxy.root_context import Log
             print(e)
             self.channel.tell("log", Log(traceback.format_exc(), "error"))
+            if self.channel:
+                self.channel.ask("error", self.flow)
         finally:
             r.form_out = form_out_backup

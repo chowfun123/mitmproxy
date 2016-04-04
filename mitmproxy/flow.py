@@ -953,7 +953,6 @@ class FlowMaster(controller.Master):
                 f.request.headers["Content-Length"] = str(len(f.request.content))
             f.response = None
             f.error = None
-            print("about to process replay req")
             self.process_new_request(f)
             rt = RequestReplayThread(
                 self.server.config,
@@ -961,10 +960,11 @@ class FlowMaster(controller.Master):
                 self.masterq if run_scripthooks else False,
                 self.should_exit
             )
-            print("start replay thread")
             rt.start()  # pragma: no cover
             if block:
                 rt.join()
+            if f.response == None:
+              return "No response in flow"
 
     def handle_log(self, l):
         self.add_event(l.msg, l.level)

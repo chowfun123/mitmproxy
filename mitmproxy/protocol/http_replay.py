@@ -2,7 +2,7 @@ from __future__ import (absolute_import, print_function, division)
 import threading
 import traceback
 from mitmproxy.exceptions import ReplayException
-from netlib.exceptions import HttpException, TcpException
+from netlib.exceptions import HttpException, TcpException, NetlibException
 from netlib.http import http1
 
 from ..controller import Channel
@@ -24,7 +24,6 @@ class RequestReplayThread(threading.Thread):
         """
         self.config, self.flow = config, flow
         if masterq:
-            print("masterq exists")
             self.channel = Channel(masterq, should_exit)
         else:
             self.channel = None
@@ -37,12 +36,12 @@ class RequestReplayThread(threading.Thread):
             self.flow.response = None
 
             # If we have a channel, run script hooks.
-            if self.channel:
-                request_reply = self.channel.ask("request", self.flow)
-                if request_reply == Kill:
-                    raise Kill()
-                elif isinstance(request_reply, HTTPResponse):
-                    self.flow.response = request_reply
+            #if self.channel:
+            #    request_reply = self.channel.ask("request", self.flow)
+            #    if request_reply == Kill:
+            #        raise Kill()
+            #    elif isinstance(request_reply, HTTPResponse):
+            #        self.flow.response = request_reply
 
             if not self.flow.response:
                 # In all modes, we directly connect to the server displayed
@@ -50,6 +49,7 @@ class RequestReplayThread(threading.Thread):
                     ##Use flow for server_conn information
                     server = self.flow.server_conn
                     server.connect()
+
                     if (r.scheme == "https"):
                         connect_request = make_connect_request((r.host, r.port))
                         server.wfile.write(http1.assemble_request(r))
@@ -114,7 +114,5 @@ class RequestReplayThread(threading.Thread):
             from ..proxy.root_context import Log
             print(e)
             self.channel.tell("log", Log(traceback.format_exc(), "error"))
-            if self.channel:
-                self.channel.ask("error", self.flow)
         finally:
             r.form_out = form_out_backup

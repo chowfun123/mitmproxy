@@ -947,8 +947,8 @@ class FlowMaster(controller.Master):
         if f.request.content == CONTENT_MISSING:
             return "Can't replay request with missing content..."
         if f.request:
-            f.backup()
-            f.request.is_replay = True
+            #f.backup()
+            #f.request.is_replay = True
             if "Content-Length" in f.request.headers:
                 f.request.headers["Content-Length"] = str(len(f.request.content))
             f.response = None

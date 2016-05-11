@@ -232,7 +232,8 @@ class HttpLayer(Layer):
                 self.send_error_response(502, repr(e))
 
             finally:
-                flow.live = False
+                if flow is not None:
+                  flow.live = False
 
     def get_request_from_client(self):
         request = self.read_request()
@@ -267,6 +268,10 @@ class HttpLayer(Layer):
         layer()
 
     def send_response_to_client(self, flow):
+        if flow.response == None:
+            self.send_error_response(502, "No Response")
+            six.reraise(ProtocolException, ProtocolException(
+                    "Error in HTTP connection: %s" % "No Response to send to client"), sys.exc_info()[2])
         if not flow.response.stream:
             # no streaming:
             # we already received the full response from the server and can
@@ -318,13 +323,15 @@ class HttpLayer(Layer):
         if flow == Kill:
             raise Kill()
 
-        if flow.response.stream:
-            flow.response.data.content = CONTENT_MISSING
-        else:
-            flow.response.data.content = b"".join(self.read_response_body(
-                flow.request,
-                flow.response
-            ))
+        #with roxy changes, flow response may not exist here
+        if flow.response is not None:
+            if flow.response.stream:
+                flow.response.data.content = CONTENT_MISSING
+            else:
+                flow.response.data.content = b"".join(self.read_response_body(
+                    flow.request,
+                    flow.response
+                ))
         flow.response.timestamp_end = utils.timestamp()
 
         # no further manipulation of self.server_conn beyond this point

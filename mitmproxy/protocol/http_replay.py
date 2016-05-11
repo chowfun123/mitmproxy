@@ -46,10 +46,13 @@ class RequestReplayThread(threading.Thread):
             if not self.flow.response:
                 # In all modes, we directly connect to the server displayed
                 if self.config.mode == "upstream":
-                    ##Use flow for server_conn information
-                    server = self.flow.server_conn
+                    print("in upstream replay")
+                    server = ServerConnection(self.flow.server_conn.address, (self.config.host, 0))
                     server.connect()
-
+                    print("connected")
+                    #print(r)
+                    if (r.method == "CONNECT"):
+                        r.form_out = "relative"
                     if (r.scheme == "https"):
                         connect_request = make_connect_request((r.host, r.port))
                         server.wfile.write(http1.assemble_request(r))
@@ -76,6 +79,7 @@ class RequestReplayThread(threading.Thread):
                     else:
                         r.form_out = "absolute"
                 else:
+                    print("in NOT upstream replay")
                     server_address = (r.host, r.port)
                     server = ServerConnection(server_address, (self.config.host, 0))
                     server.connect()
@@ -85,9 +89,12 @@ class RequestReplayThread(threading.Thread):
                             sni=self.flow.server_conn.sni
                         )
                     r.form_out = "relative"
-
-                server.wfile.write(http1.assemble_request(r))
+                msg = http1.assemble_request(r)
+                #print(msg)
+                server.wfile.write(msg)
+                #print("set current server to flush")
                 server.wfile.flush()
+                #print("set current server to main server_conn")
                 self.flow.server_conn = server
                 myResponse = http1.read_response(
                     server.rfile,
@@ -113,6 +120,6 @@ class RequestReplayThread(threading.Thread):
         except Exception as e:
             from ..proxy.root_context import Log
             print(e)
-            self.channel.tell("log", Log(traceback.format_exc(), "error"))
+            #self.channel.tell("log", Log(traceback.format_exc(), "error"))
         finally:
             r.form_out = form_out_backup

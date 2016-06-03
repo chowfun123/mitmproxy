@@ -324,6 +324,9 @@ class HttpLayer(Layer):
             raise Kill()
 
         #with roxy changes, flow response may not exist here
+        if flow is None:
+            raise Kill()
+
         if flow.response is not None:
             if flow.response.stream:
                 flow.response.data.content = CONTENT_MISSING
@@ -332,7 +335,11 @@ class HttpLayer(Layer):
                     flow.request,
                     flow.response
                 ))
-        flow.response.timestamp_end = utils.timestamp()
+            flow.response.timestamp_end = utils.timestamp()
+        else:
+            flow.error = Error(str(e))
+            self.channel.ask("error", flow)
+            self.log(traceback.format_exc(), "debug")
 
         # no further manipulation of self.server_conn beyond this point
         # we can safely set it as the final attribute value here.

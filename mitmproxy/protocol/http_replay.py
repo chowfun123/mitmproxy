@@ -102,7 +102,7 @@ class RequestReplayThread(threading.Thread):
                     body_size_limit=self.config.body_size_limit
                 )
                 self.flow.response = HTTPResponse.wrap(myResponse)
-                self.flow.client_conn.send(http1.assemble_response(myResponse))
+                #self.flow.client_conn.send(http1.assemble_response(myResponse))
             if self.channel:
                 response_reply = self.channel.ask("response", self.flow)
                 if response_reply == Kill:

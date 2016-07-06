@@ -46,15 +46,19 @@ class RequestReplayThread(threading.Thread):
             if not self.flow.response:
                 # In all modes, we directly connect to the server displayed
                 if self.config.mode == "upstream":
-                    print("in upstream replay")
+                    print("In upstream replay")
+                    print(r.scheme)
+                    print(r.method)
+                    print("host [%s] port [%d]" % (r.host, r.port))
+                    print(self.flow.server_conn.address)
                     server = ServerConnection(self.flow.server_conn.address, (self.config.host, 0))
                     server.connect()
                     print("connected")
                     #print(r)
                     if (r.method == "CONNECT"):
-                        r.form_out = "relative"
-                    if (r.scheme == "https"):
+                        print('HTTPS replay')
                         connect_request = make_connect_request((r.host, r.port))
+                        print(r)
                         server.wfile.write(http1.assemble_request(r))
                         server.wfile.flush()
                         resp = http1.read_response(
@@ -62,20 +66,16 @@ class RequestReplayThread(threading.Thread):
                             connect_request,
                             body_size_limit=self.config.body_size_limit
                         )
-                        print (resp)
+                        self.flow.response = HTTPResponse.wrap(resp)
+                        print ('https resp: %s' % self.flow.response)
                         if resp.status_code != 200:
                             raise ReplayException("Upstream server refuses CONNECT request")
                         server.establish_ssl(
                             self.config.clientcerts,
                             sni=self.flow.server_conn.sni
                         )
-                        self.flow.response = HTTPResponse.wrap(resp)
-                        print("reply with SSL connect response")
-                        print(server.timestamp_ssl_setup)
-                        print(self.flow.response.headers)
-                        print(self.flow.response.content)
-                        self.flow.client_conn.send(http1.assemble_response(resp))
                         r.form_out = "relative"
+                        return
                     else:
                         r.form_out = "absolute"
                 else:
@@ -83,14 +83,14 @@ class RequestReplayThread(threading.Thread):
                     server_address = (r.host, r.port)
                     server = ServerConnection(server_address, (self.config.host, 0))
                     server.connect()
-                    if r.scheme == "https":
+                    if r.scheme == "https" or r.method=="CONNECT":
                         server.establish_ssl(
                             self.config.clientcerts,
                             sni=self.flow.server_conn.sni
                         )
                     r.form_out = "relative"
                 msg = http1.assemble_request(r)
-                #print(msg)
+                print('msg: %s' % msg)
                 server.wfile.write(msg)
                 #print("set current server to flush")
                 server.wfile.flush()
@@ -102,6 +102,7 @@ class RequestReplayThread(threading.Thread):
                     body_size_limit=self.config.body_size_limit
                 )
                 self.flow.response = HTTPResponse.wrap(myResponse)
+                print('myresp: ' % myResponse)
                 #self.flow.client_conn.send(http1.assemble_response(myResponse))
             if self.channel:
                 response_reply = self.channel.ask("response", self.flow)

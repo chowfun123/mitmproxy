@@ -10,6 +10,7 @@ from ..models import Error, HTTPResponse, ServerConnection, make_connect_request
 from .base import Kill
 import time
 import socket
+from urllib2 import quote
 
 # TODO: Doesn't really belong into mitmproxy.protocol...
 
@@ -77,13 +78,44 @@ class RequestReplayThread(threading.Thread):
                         r.form_out = "relative"
                         return
                     else:
-                        r.form_out = "absolute"
+                        if (r.scheme == 'https'):
+                        #need to resend CONNECT request and establish before GET
+                            print('GET in HTTPS')
+                            r.form_out = "authority"
+                            connect_request = make_connect_request((r.host, r.port))
+                            oldmethod = r.method
+                            r.method = 'CONNECT'
+                            oldpath = r.path
+                            r.path = None
+                            server.wfile.write(http1.assemble_request(r))
+                            server.wfile.flush()
+                            resp = http1.read_response(
+                                server.rfile,
+                                connect_request,
+                                body_size_limit=self.config.body_size_limit
+                            )
+                            self.flow.response = HTTPResponse.wrap(resp)
+                            print ('https resp: %s' % self.flow.response)
+                            if resp.status_code != 200:
+                                raise ReplayException("Upstream server refuses CONNECT request")
+                            #set the old request and change to relative to keep
+                            #it under the same host
+                            r.method = oldmethod
+                            r.path = oldpath
+                            r.form_out = 'relative'
+                            server.establish_ssl(
+                                self.config.clientcerts,
+                                sni=self.flow.server_conn.sni
+                            )
+                            print(r)
+                        else:
+                            r.form_out = 'absolute'
                 else:
                     print("in NOT upstream replay")
                     server_address = (r.host, r.port)
                     server = ServerConnection(server_address, (self.config.host, 0))
                     server.connect()
-                    if r.scheme == "https" or r.method=="CONNECT":
+                    if r.scheme == "https":
                         server.establish_ssl(
                             self.config.clientcerts,
                             sni=self.flow.server_conn.sni
@@ -94,7 +126,8 @@ class RequestReplayThread(threading.Thread):
                 server.wfile.write(msg)
                 #print("set current server to flush")
                 server.wfile.flush()
-                #print("set current server to main server_conn")
+                print("set current server to main server_conn")
+                print(server)
                 self.flow.server_conn = server
                 myResponse = http1.read_response(
                     server.rfile,
@@ -102,7 +135,7 @@ class RequestReplayThread(threading.Thread):
                     body_size_limit=self.config.body_size_limit
                 )
                 self.flow.response = HTTPResponse.wrap(myResponse)
-                print('myresp: ' % myResponse)
+                print('myresp: %s' % self.flow.response)
                 #self.flow.client_conn.send(http1.assemble_response(myResponse))
             if self.channel:
                 response_reply = self.channel.ask("response", self.flow)
